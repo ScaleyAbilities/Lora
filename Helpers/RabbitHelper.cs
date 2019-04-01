@@ -3,8 +3,6 @@ using System.Collections.Generic;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using RabbitMQ.Client.Exceptions;
@@ -17,8 +15,7 @@ namespace Lora
         private static IModel rabbitChannel;
 
         private static string rabbitHost = Environment.GetEnvironmentVariable("RABBIT_HOST") ?? "localhost";
-        public static string rabbitLogQueue = "log";
-        private static IBasicProperties rabbitProperties;
+        public static string rabbitLogQueue = "logs";
 
         static RabbitHelper()
         {
@@ -27,8 +24,7 @@ namespace Lora
             {
                 HostName = rabbitHost,
                 UserName = "scaley",
-                Password = "abilities",
-                DispatchConsumersAsync = true,
+                Password = "abilities"
             };
 
             // Try connecting to rabbit until it works
@@ -58,19 +54,15 @@ namespace Lora
             );
 
             // This makes Rabbit wait for an ACK before sending us the next message
-            rabbitChannel.BasicQos(prefetchSize: 0, prefetchCount: 50, global: false);
-
-            rabbitProperties = rabbitChannel.CreateBasicProperties();
-            rabbitProperties.Persistent = true;
+            rabbitChannel.BasicQos(prefetchSize: 0, prefetchCount: 500, global: false);
         }
 
-        public static void CreateConsumer(Action<String> messageCallback, string queue)
+        public static void CreateConsumer(Action<string> messageCallback)
         {
-            var consumer = new AsyncEventingBasicConsumer(rabbitChannel);
-            consumer.Received += async (model, eventArgs) =>
+            var consumer = new EventingBasicConsumer(rabbitChannel);
+            consumer.Received += (model, eventArgs) =>
             {
-
-                var message = JObject.Parse(Encoding.UTF8.GetString(eventArgs.Body));
+                var message = Encoding.UTF8.GetString(eventArgs.Body);
     
                 if (message != null)
                     messageCallback(message);
@@ -79,9 +71,9 @@ namespace Lora
                 rabbitChannel.BasicAck(eventArgs.DeliveryTag, false);
             };
 
-            // This will begin consuming messages asynchronously
+            // This will begin consuming messages
             rabbitChannel.BasicConsume(
-                queue: queue,
+                queue: rabbitLogQueue,
                 autoAck: false,
                 consumer: consumer
             );

@@ -5,25 +5,36 @@ using System.Xml;
 using System.Threading.Tasks;
 using System.Data.Common;
 using System.IO;
+using System.Linq;
 
 namespace Lora
 {
     public static class LogXmlHelper
     {
-        private static String xmlFilename = "log.xml";
+        private const int CommandParts = 7;
+        private const int EventParts = 8;
+        private const int TransactionParts = 5;
+        private const int QuoteParts = 6;
+
+        private const string XmlFilename = "log.xml";
+
+        private static long transactionNum = 1;
 
         private static XmlWriter xmlWriter;
         static LogXmlHelper() 
         {            
-            // Delete the file if it exists.
-            if (File.Exists(xmlFilename))
+            // If the log exists, rename it to something else
+            if (File.Exists(XmlFilename))
             {
-                Console.WriteLine("XML Log already exists!!");
-                Environment.Exit(1);
+                var num = 1;
+                while (File.Exists($"{XmlFilename}.old{num}"))
+                    num++;
+                
+                File.Move(XmlFilename, $"{XmlFilename}.old{num}");
             }
 
             XmlWriterSettings settings = new XmlWriterSettings { Indent = true };            
-            xmlWriter = XmlWriter.Create(xmlFilename, settings);
+            xmlWriter = XmlWriter.Create(XmlFilename, settings);
             xmlWriter.WriteStartDocument();
         }
 
@@ -35,117 +46,135 @@ namespace Lora
 
         public static void AddLogEntry(string logEntry)
         {
+            var lines = logEntry.Split(Environment.NewLine);
+            var server = lines[0];
             
-                if (user != null)
-                {
-                    logCommand.CommandText += @" WHERE users.id = @userid";
-                    logCommand.Parameters.AddWithValue("@userid", user.Id);
-                }
+            foreach (var line in lines.Skip(1))
+            {
+                if (string.IsNullOrWhiteSpace(line))
+                    continue;
 
-                
-                using (var reader = await logCommand.ExecuteReaderAsync())
-                {
-                    xmlWriter.WriteStartElement("log");
+                var type = line[0];
+                string[] parts;
+                string command, username, amount, stockSymbol, filename, timestamp, message;
 
-                    while (await reader.ReadAsync())
-                    {
-                        var logType = reader["logtype"].ToString();
-                        switch (logType)
+                switch (type)
+                {
+                    case 'c': // Command
+                        parts = line.Split(',', CommandParts);
+                        if (parts.Length != CommandParts)
+                            Console.WriteLine($"Command entry does not have {CommandParts} parts");
+
+                        command = parts[1];
+                        username = parts[2];
+                        amount = parts[3];
+                        stockSymbol = parts[4];
+                        timestamp = parts[5];
+                        filename = parts[6];
+
+                        xmlWriter.WriteStartElement("userCommand");
+                        WriteRequiredValues(xmlWriter, timestamp, server);
+                        WriteCommonValues(xmlWriter, username, stockSymbol, amount, filename);
+                        xmlWriter.WriteEndElement();
+
+                        // TODO: Change this behaviour. But this is fine for the workload files
+                        if (command == "DUMPLOG")
                         {
-                            case "command":
-                                xmlWriter.WriteStartElement("userCommand");
-                                WriteRequiredValues(xmlWriter, reader);
-                                WriteCommonValues(xmlWriter, reader);
-                                xmlWriter.WriteEndElement();
-                                break;
-                            
-                            case "quote":
-                                xmlWriter.WriteStartElement("quoteServer");
-                                WriteRequiredValues(xmlWriter, reader);
-
-
-                                xmlWriter.WriteElementString("quoteServerTime", reader["quoteservertime"].ToString());
-
-                                // NOTE: We store the returned username in the message column
-                                xmlWriter.WriteElementString("username", reader["message"].ToString());
-
-                                xmlWriter.WriteElementString("stockSymbol", reader["stocksymbol"].ToString());
-                                xmlWriter.WriteElementString("price", reader["amount"].ToString());
-                                xmlWriter.WriteElementString("cryptokey", reader["cryptokey"].ToString());
-
-                                xmlWriter.WriteEndElement();
-                                break;
-
-                            case "transaction":
-                                xmlWriter.WriteStartElement("accountTransaction");
-                                WriteRequiredValues(xmlWriter, reader);
-
-                                xmlWriter.WriteElementString("action", reader["message"].ToString());
-                                xmlWriter.WriteElementString("username", reader["username"].ToString());
-                                xmlWriter.WriteElementString("funds", reader["amount"].ToString());
-
-                                xmlWriter.WriteEndElement();
-                                break;
-
-                            case "system":
-                                xmlWriter.WriteStartElement("systemEvent");
-                                WriteRequiredValues(xmlWriter, reader);
-                                WriteCommonValues(xmlWriter, reader);
-                                xmlWriter.WriteEndElement();
-                                break;
-
-                            case "error":
-                                xmlWriter.WriteStartElement("errorEvent");
-                                WriteRequiredValues(xmlWriter, reader);
-                                WriteCommonValues(xmlWriter, reader);
-
-                                xmlWriter.WriteElementString("errorMessage", reader["message"].ToString());
-
-                                xmlWriter.WriteEndElement();
-                                break;
-
-                            case "debug":
-                                xmlWriter.WriteStartElement("debugEvent");
-                                WriteRequiredValues(xmlWriter, reader);
-                                WriteCommonValues(xmlWriter, reader);
-
-                                xmlWriter.WriteElementString("debugMessage", reader["message"].ToString());
-
-                                xmlWriter.WriteEndElement();
-                                break;
+                            Console.WriteLine("DUMPLOG Encountered!");
+                            Program.Quit();
                         }
-                    }
-                    
-                    xmlWriter.WriteEndElement();
+
+                        break;
+                    case 'e': // Event
+                        parts = line.Split(',', EventParts);
+                        if (parts.Length != EventParts)
+                            Console.WriteLine($"Event entry does not have {EventParts} parts");
+
+                        var eventType = parts[1].ToLower() + "Event";
+
+                        username = parts[2];
+                        amount = parts[3];
+                        stockSymbol = parts[4];
+                        filename = parts[5];
+                        timestamp = parts[6];
+                        message = parts[7];
+
+                        xmlWriter.WriteStartElement(eventType);
+                        WriteRequiredValues(xmlWriter, timestamp, server);
+                        WriteCommonValues(xmlWriter, username, stockSymbol, amount, filename);
+
+                        if (eventType == "errorEvent") 
+                            xmlWriter.WriteElementString("errorMessage", message);
+                        else if (eventType == "debugEvent")
+                            xmlWriter.WriteElementString("debugMessage", message);
+
+                        xmlWriter.WriteEndElement();
+
+                        break;
+                    case 't': // Transaction
+                        parts = line.Split(',', TransactionParts);
+                        if (parts.Length != TransactionParts)
+                            Console.WriteLine($"Event entry does not have {TransactionParts} parts");
+                        
+                        username = parts[1];
+                        amount = parts[2];
+                        timestamp = parts[3];
+                        message = parts[4];
+
+                        xmlWriter.WriteStartElement("accountTransaction");
+                        WriteRequiredValues(xmlWriter, timestamp, server);
+                        
+                        xmlWriter.WriteElementString("action", message);
+                        xmlWriter.WriteElementString("username", username);
+                        xmlWriter.WriteElementString("funds", amount);
+
+                        xmlWriter.WriteEndElement();
+                        break;
+                    case 'q': // Quote
+                        parts = line.Split(',', QuoteParts);
+                        if (parts.Length != QuoteParts)
+                            Console.WriteLine($"Event entry does not have {QuoteParts} parts");
+
+                        amount = parts[1];
+                        stockSymbol = parts[2];
+                        username = parts[3];
+                        timestamp = parts[4];
+
+                        var cryptokey = parts[5];
+
+                        xmlWriter.WriteStartElement("quoteServer");
+                        WriteRequiredValues(xmlWriter, timestamp, server);
+
+                        xmlWriter.WriteElementString("quoteServerTime", timestamp);
+                        xmlWriter.WriteElementString("username", username);
+                        xmlWriter.WriteElementString("stockSymbol", stockSymbol);
+                        xmlWriter.WriteElementString("price", amount);
+                        xmlWriter.WriteElementString("cryptokey", cryptokey);
+
+                        xmlWriter.WriteEndElement();
+                        break;
+                    default:
+                        Console.WriteLine($"Unknown log entry type {type}");
+                        break;
                 }
             }
-    
 
-        private static void WriteRequiredValues(XmlWriter xmlWriter, DbDataReader reader)
+            transactionNum++;
+        }
+    
+        private static void WriteRequiredValues(XmlWriter xmlWriter, string timestamp, string server)
         {
-            xmlWriter.WriteElementString("timestamp", UnixTimestamp((DateTime)reader["timestamp"]));
-            xmlWriter.WriteElementString("server", reader["server"].ToString());
-            xmlWriter.WriteElementString("transactionNum", reader["workid"].ToString());
+            xmlWriter.WriteElementString("timestamp", timestamp);
+            xmlWriter.WriteElementString("server", server);
+            xmlWriter.WriteElementString("transactionNum", transactionNum.ToString());
         }
 
-        private static void WriteCommonValues(XmlWriter xmlWriter, DbDataReader reader)
+        private static void WriteCommonValues(XmlWriter xmlWriter, string username, string stockSymbol, string amount, string filename)
         {
-            xmlWriter.WriteElementString("command", reader["command"].ToString());
-
-            var username = reader["username"].ToString();
-            var stockSymbol = reader["stocksymbol"].ToString();
-            var filename = reader["filename"].ToString();
-            var funds = reader["amount"].ToString();
-
             if (!string.IsNullOrEmpty(username)) xmlWriter.WriteElementString("username", username);
             if (!string.IsNullOrEmpty(stockSymbol)) xmlWriter.WriteElementString("stockSymbol", stockSymbol);
             if (!string.IsNullOrEmpty(filename)) xmlWriter.WriteElementString("filename", filename);
-            if (!string.IsNullOrEmpty(funds)) xmlWriter.WriteElementString("funds", funds);
-        }
-
-        private static string UnixTimestamp(DateTime time)
-        {
-            return Math.Round(time.Subtract(new DateTime(1970, 1, 1)).TotalSeconds * 1000).ToString();
+            if (!string.IsNullOrEmpty(amount)) xmlWriter.WriteElementString("funds", amount);
         }
     }
 }
