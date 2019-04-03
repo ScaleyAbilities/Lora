@@ -92,6 +92,8 @@ namespace Lora
                 log.Server = server;
                 log.Transaction = transaction;
 
+                Console.WriteLine(line);
+
                 try
                 {
                     switch (type)
