@@ -53,6 +53,13 @@ namespace Lora
 
         public static void AddLogEntry(string logEntry)
         {
+            // TODO: Remove this dumb thing
+            if (logEntry == "SPECIALDUMP")
+            {
+                LogXmlHelper.CreateLog("testLog.xml", db);
+                return;
+            }
+
             var lines = logEntry.Split(Environment.NewLine);
             var logParams = lines[0].Split(',', 2);
 
@@ -87,7 +94,7 @@ namespace Lora
                             log.LogType = "command";
                             log.Command = parts[1];
                             log.Username = parts[2];
-                            log.Amount = parts[3] == null ? (decimal?)decimal.Parse(parts[3]) : null;
+                            log.Amount = !string.IsNullOrWhiteSpace(parts[3]) ? (decimal?)decimal.Parse(parts[3]) : null;
                             log.StockSymbol = parts[4];
                             log.Filename = parts[5];
                             log.Timestamp = ulong.Parse(parts[6]);
@@ -100,7 +107,7 @@ namespace Lora
 
                             log.LogType = parts[1].ToLower();
                             log.Username = parts[2];
-                            log.Amount = parts[3] == null ? (decimal?)decimal.Parse(parts[3]) : null;
+                            log.Amount = !string.IsNullOrWhiteSpace(parts[3]) ? (decimal?)decimal.Parse(parts[3]) : null;
                             log.StockSymbol = parts[4];
                             log.Filename = parts[5];
                             log.Timestamp = ulong.Parse(parts[6]);
@@ -114,7 +121,7 @@ namespace Lora
                             
                             log.LogType = "transaction";
                             log.Username = parts[1];
-                            log.Amount = parts[2] == null ? (decimal?)decimal.Parse(parts[2]) : null;
+                            log.Amount = !string.IsNullOrWhiteSpace(parts[2]) ? (decimal?)decimal.Parse(parts[2]) : null;
                             log.Timestamp = ulong.Parse(parts[3]);
                             log.Message = parts[4];
 
@@ -125,7 +132,7 @@ namespace Lora
                                 throw new ArgumentException($"Event entry does not have {QuoteParts} parts");
 
                             log.LogType = "transaction";
-                            log.Amount = parts[1] == null ? (decimal?)decimal.Parse(parts[1]) : null;
+                            log.Amount = !string.IsNullOrWhiteSpace(parts[1]) ? (decimal?)decimal.Parse(parts[1]) : null;
                             log.StockSymbol = parts[2];
                             log.Username = parts[3];
                             log.Timestamp = ulong.Parse(parts[4]);

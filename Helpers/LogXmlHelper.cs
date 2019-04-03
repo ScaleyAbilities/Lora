@@ -111,6 +111,8 @@ namespace Lora
 
         private static void WriteCommonValues(XmlWriter xmlWriter, Log log)
         {
+            xmlWriter.WriteElementString("command", log.Command);
+
             if (!string.IsNullOrEmpty(log.Username)) xmlWriter.WriteElementString("username", log.Username);
             if (!string.IsNullOrEmpty(log.StockSymbol)) xmlWriter.WriteElementString("stockSymbol", log.StockSymbol);
             if (!string.IsNullOrEmpty(log.Filename)) xmlWriter.WriteElementString("filename", log.Filename);
