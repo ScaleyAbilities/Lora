@@ -24,18 +24,20 @@ namespace Lora
             Enabled = false
         };
 
-        private static LogContext db = new LogContext();
+        private static LogContext db;
 
         static void Main(string[] args)
         {  
             Console.CancelKeyPress += new ConsoleCancelEventHandler((sender, eventArgs) => Quit());
+
+            db = new LogContext();
 
             db.Database.EnsureCreated();
 
             RabbitHelper.CreateConsumer(AddLogEntry);
 
             commitTimer.Elapsed += (source, eventArgs) => {
-                db.SaveChanges();
+                Save();
             };
 
             Console.WriteLine("Logger running...");
@@ -156,14 +158,14 @@ namespace Lora
 
                     db.Logs.Add(log);
 
-                    if (++addedLogs > 2000) {
-                        db.SaveChanges();
-                        addedLogs = 0;
-                    }
-
                     // Restart the commit timer
                     commitTimer.Stop();
                     commitTimer.Start();
+
+                    if (++addedLogs > 1000) {
+                        Save();
+                        addedLogs = 0;
+                    }
 
                     // TODO: Change this behaviour. But this is fine for the workload files
                     if (log.Command == "DUMPLOG")
@@ -178,6 +180,13 @@ namespace Lora
                     continue;
                 }
             }
+        }
+
+        public static void Save()
+        {
+            db.SaveChanges();
+            db.Dispose();
+            db = new LogContext();
         }
     }
 }
