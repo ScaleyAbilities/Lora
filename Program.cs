@@ -4,8 +4,7 @@ using System.Collections.Concurrent;
 using System.Data;
 using System.Data.Common;
 using System.Linq;
-using System.Threading.Tasks;
-using System.Threading;
+using System.Timers;
 using Microsoft.EntityFrameworkCore;
 using Lora.Models;
 
@@ -18,6 +17,13 @@ namespace Lora
         private const int TransactionParts = 5;
         private const int QuoteParts = 6;
 
+        private static int addedLogs = 0;
+
+        private static Timer commitTimer = new Timer(5000) {
+            AutoReset = false,
+            Enabled = false
+        };
+
         private static LogContext db = new LogContext();
 
         static void Main(string[] args)
@@ -27,7 +33,11 @@ namespace Lora
             db.Database.EnsureCreated();
 
             RabbitHelper.CreateConsumer(AddLogEntry);
-            
+
+            commitTimer.Elapsed += (source, eventArgs) => {
+                db.SaveChanges();
+            };
+
             Console.WriteLine("Logger running...");
             Console.WriteLine("Press Ctrl-C to exit.");
 
@@ -144,7 +154,15 @@ namespace Lora
                     }
 
                     db.Logs.Add(log);
-                    db.SaveChanges();
+
+                    if (++addedLogs > 2000) {
+                        db.SaveChanges();
+                        addedLogs = 0;
+                    }
+
+                    // Restart the commit timer
+                    commitTimer.Stop();
+                    commitTimer.Start();
 
                     // TODO: Change this behaviour. But this is fine for the workload files
                     if (log.Command == "DUMPLOG")
