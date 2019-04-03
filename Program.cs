@@ -13,7 +13,7 @@ namespace Lora
     class Program
     {
         private const int CommandParts = 7;
-        private const int EventParts = 8;
+        private const int EventParts = 9;
         private const int TransactionParts = 5;
         private const int QuoteParts = 6;
 
@@ -116,12 +116,13 @@ namespace Lora
                                 throw new ArgumentException($"Event entry does not have {EventParts} parts");
 
                             log.LogType = parts[1].ToLower();
-                            log.Username = parts[2];
-                            log.Amount = !string.IsNullOrWhiteSpace(parts[3]) ? (decimal?)decimal.Parse(parts[3]) : null;
-                            log.StockSymbol = parts[4];
-                            log.Filename = parts[5];
-                            log.Timestamp = ulong.Parse(parts[6]);
-                            log.Message = parts[7];
+                            log.Command = parts[2];
+                            log.Username = parts[3];
+                            log.Amount = !string.IsNullOrWhiteSpace(parts[4]) ? (decimal?)decimal.Parse(parts[4]) : null;
+                            log.StockSymbol = parts[5];
+                            log.Filename = parts[6];
+                            log.Timestamp = ulong.Parse(parts[7]);
+                            log.Message = parts[8];
 
                             break;
                         case 't': // Transaction
