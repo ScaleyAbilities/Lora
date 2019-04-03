@@ -92,8 +92,6 @@ namespace Lora
                 log.Server = server;
                 log.Transaction = transaction;
 
-                Console.WriteLine(line);
-
                 try
                 {
                     switch (type)
@@ -143,7 +141,7 @@ namespace Lora
                             if (parts.Length != QuoteParts)
                                 throw new ArgumentException($"Event entry does not have {QuoteParts} parts");
 
-                            log.LogType = "transaction";
+                            log.LogType = "quote";
                             log.Amount = !string.IsNullOrWhiteSpace(parts[1]) ? (decimal?)decimal.Parse(parts[1]) : null;
                             log.StockSymbol = parts[2];
                             log.Username = parts[3];
