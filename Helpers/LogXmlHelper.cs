@@ -39,7 +39,7 @@ namespace Lora
                     int transactionNum;
                     if (!transactions.TryGetValue(log.Transaction, out transactionNum))
                     {
-                        transactionNum = transactionCount++;
+                        transactionNum = ++transactionCount;
                         transactions.Add(log.Transaction, transactionNum);
                     }
 
