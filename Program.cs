@@ -7,6 +7,7 @@ using System.Linq;
 using System.Timers;
 using Microsoft.EntityFrameworkCore;
 using Lora.Models;
+using Newtonsoft.Json.Linq;
 
 namespace Lora
 {
@@ -16,6 +17,7 @@ namespace Lora
         private const int EventParts = 9;
         private const int TransactionParts = 5;
         private const int QuoteParts = 6;
+        private const int RequestParts = 3;
 
         private static int addedLogs = 0;
 
@@ -65,10 +67,11 @@ namespace Lora
 
         public static void AddLogEntry(string logEntry)
         {
-            // TODO: Remove this dumb thing
+            // This is just so we can manually trigger a dump to file
             if (logEntry == "SPECIALDUMP")
             {
-                LogXmlHelper.CreateLog("testLog.xml", db);
+                var logXml = LogXmlHelper.CreateLog(db);
+                WriteLogFile("testLog.xml", logXml);
                 return;
             }
 
@@ -152,6 +155,32 @@ namespace Lora
                             log.Cryptokey = parts[5];
 
                             break;
+                        case 'r': // Request for logs to frontent
+                            parts = line.Split(',', RequestParts);
+                            if (parts.Length != RequestParts)
+                                throw new ArgumentException($"Event entry does not have {RequestParts} parts");
+
+                            var username = string.IsNullOrWhiteSpace(parts[1]) ? null : parts[1];
+                            var reference = parts[2];
+
+                            // Stop the timer in case this takes a while
+                            commitTimer.Stop();
+
+                            // Commit now before creating log for user
+                            Save();
+                            addedLogs = 0;
+
+                            var logXml = LogXmlHelper.CreateLog(db, username);
+
+                            JObject response = new JObject();
+                            response.Add("ref", reference);
+                            response.Add("status", "ok");
+                            response.Add("data", logXml);
+
+                            RabbitHelper.PushResponse(response);
+
+                            // Restart the loop so we don't try to log this special entry
+                            continue;
                         default:
                             throw new ArgumentException($"Unknown log entry type {type}");
                     }
@@ -166,13 +195,6 @@ namespace Lora
                         Save();
                         addedLogs = 0;
                     }
-
-                    // TODO: Change this behaviour. But this is fine for the workload files
-                    if (log.Command == "DUMPLOG")
-                    {
-                        Console.WriteLine("DUMPLOG Encountered!");
-                        //LogXmlHelper.CreateLog(log.Filename, db);
-                    }
                 }
                 catch (Exception e)
                 {
@@ -180,6 +202,21 @@ namespace Lora
                     continue;
                 }
             }
+        }
+
+        public static void WriteLogFile(string filename, string log)
+        {
+            // If the log exists, rename it to something else
+            if (File.Exists(filename))
+            {
+                var num = 1;
+                while (File.Exists($"{filename}.old{num}"))
+                    num++;
+                
+                File.Move(filename, $"{filename}.old{num}");
+            }
+
+            File.WriteAllText(filename, log);
         }
 
         public static void Save()

@@ -13,28 +13,20 @@ namespace Lora
 {
     public static class LogXmlHelper
     {
-        public static void CreateLog(string filename, LogContext db, string username = null)
-        {            
-            // If the log exists, rename it to something else
-            if (File.Exists(filename))
-            {
-                var num = 1;
-                while (File.Exists($"{filename}.old{num}"))
-                    num++;
-                
-                File.Move(filename, $"{filename}.old{num}");
-            }
-
+        public static string CreateLog(LogContext db, string username = null)
+        {
             var transactions = new Dictionary<string, int>();
             var transactionCount = 0;
+            string logString;
 
             XmlWriterSettings settings = new XmlWriterSettings { Indent = true };
-            using (var xmlWriter = XmlWriter.Create(filename, settings))
+            using (var stringWriter = new StringWriter())
+            using (var xmlWriter = XmlWriter.Create(stringWriter, settings))
             {
                 xmlWriter.WriteStartDocument();
                 xmlWriter.WriteStartElement("log");
 
-                foreach (var log in db.Logs)
+                foreach (var log in username == null ? db.Logs : db.Logs.Where(log => log.Username == username))
                 {
                     int transactionNum;
                     if (!transactions.TryGetValue(log.Transaction, out transactionNum))
@@ -99,7 +91,12 @@ namespace Lora
 
                 xmlWriter.WriteEndElement();
                 xmlWriter.WriteEndDocument();
+                xmlWriter.Flush();
+
+                logString = stringWriter.ToString();
             }
+
+            return logString;
         }
 
         private static void WriteRequiredValues(XmlWriter xmlWriter, Log log, int transactionNum)

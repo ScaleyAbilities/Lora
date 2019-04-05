@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using RabbitMQ.Client.Exceptions;
@@ -16,6 +18,11 @@ namespace Lora
 
         private static string rabbitHost = Environment.GetEnvironmentVariable("RABBIT_HOST") ?? "localhost";
         public static string rabbitLogQueue = "logs";
+        
+        public static string rabbitResponseQueue = "response";
+
+        
+        private static IBasicProperties rabbitProperties;
 
         static RabbitHelper()
         {
@@ -53,8 +60,19 @@ namespace Lora
                 arguments: null
             );
 
+            rabbitChannel.QueueDeclare(
+                queue: rabbitResponseQueue,
+                durable: true,
+                exclusive: false,
+                autoDelete: false,
+                arguments: null
+            );
+
             // This makes Rabbit wait for an ACK before sending us the next message
             rabbitChannel.BasicQos(prefetchSize: 0, prefetchCount: 500, global: false);
+
+            rabbitProperties = rabbitChannel.CreateBasicProperties();
+            rabbitProperties.Persistent = true;
         }
 
         public static void CreateConsumer(Action<string> messageCallback)
@@ -76,6 +94,16 @@ namespace Lora
                 queue: rabbitLogQueue,
                 autoAck: false,
                 consumer: consumer
+            );
+        }
+
+        public static void PushResponse(JObject responseJson)
+        {
+            rabbitChannel.BasicPublish(
+                exchange: "",
+                routingKey: rabbitResponseQueue,
+                basicProperties: rabbitProperties,
+                body: Encoding.UTF8.GetBytes(responseJson.ToString(Formatting.None))
             );
         }
         
